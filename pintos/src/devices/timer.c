@@ -29,8 +29,7 @@ static struct thr_queue *tail = NULL; // указатель на хвост сп
 struct thr_queue *cur = NULL;         //нужный при сортировке указатель на конкретный элемент списка
 static int nodes_count = 0;           //подсчёт количества элементов списка, вдруг пригодится
 
-void create_node();
-void sort_insert_list(struct thr_queue *root);
+void create_node_insert(int64_t s_ticks);
 void thread_wakeup(void);
 
 /* Number of timer ticks since OS booted. */
@@ -162,19 +161,12 @@ void timer_sleep(int64_t ticks)
   if (ticks < 1)
     return; /* defence */
 
-  int64_t s_ticks = ticks;
-  enum intr_level old_level;
-  old_level = intr_disable();
-
-  create_node(s_ticks);
-
-  // tail -> thr = thread_current();
-  // sort_insert_list(head);
-
-  intr_set_level(old_level);
+  int64_t s_ticks = start + ticks;
+  intr_disable();
+  create_node_insert(s_ticks);
+  thread_block();
+  intr_enable();
   thread_yeld();
-  //while (timer_elapsed (start) < ticks)
-  //   thread_yield ();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
