@@ -17,6 +17,21 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+struct thr_queue /* modification */
+{
+  struct thread *thr;
+  struct thr_queue *next;
+};
+
+static struct thr_queue *head = NULL;
+static struct thr_queue *tail = NULL;
+//static struct thr_queue *cur = NULL;
+static int nodes_count = 0;
+
+void create_node ();
+void sort_insert_list (struct thr_queue *root);
+void thread_wakeup(void);
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -84,6 +99,61 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+void create_node()
+{
+  if (head == NULL)
+  {
+    head = (struct thr_cueue *) malloc (sizeof (struct thr_queue));
+    head -> next = NULL;
+    tail = head;
+    head -> thr = thread_current();
+  }
+  else
+  {
+    tail -> next = (struct thr_cueue *) malloc (sizeof (struct thr_queue));
+    tail = tail -> next;
+    tail -> thr = thread_current();
+    tail -> next = NULL;
+  }
+  nodes_count++;
+}
+
+//  void sort_insert_list (struct thr_queue *head)
+//  {
+//      struct thr_queue *p, *key;
+//      struct thr_queue *result = root;
+//      root = root->next;      /* Головой стал следующий элемент */
+//      result->next = NULL;    /* Первый элемент отсортированного списка */
+
+//      while(root->next != NULL){
+//          key = root;
+//          root = root->next;
+//          if(key->thr->sleep_ticks < result->thr->sleep_ticks){   /* Вставляем результат в голову */
+//              key->next = result;
+//              result = key;
+//          }else{
+//              p = result;
+//              while(p->next != NULL){     /* Бежим по уже сформированному результату */
+//                  if(p->next->thr->sleep_ticks > key->thr->sleep_ticks)
+//                      break;
+//                  p = p->next;
+//              }
+//              key->next = p->next;
+//              p->next = key;
+//          }
+//      }
+//      root = result;
+//  }
+
+void thread_wakeup(void)
+{
+  while(head->thr->sleep_ticks <= timer_tikcs())
+  {
+    thread_unblock(head->thr);
+    head=head->next;
+  }  
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
@@ -92,8 +162,19 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  if (ticks < 1) return; /* defence */
+
+  thread_current()->sleep_ticks = ticks;
+  enum intr_level old_level;
+  old_level = intr_disable();
+  
+  create_node ();
+  tail -> thr = thread_current();
+  sort_insert_list(head);
+  intr_set_level(old_level);	
+  thread_yeld();
+  //while (timer_elapsed (start) < ticks) 
+  //   thread_yield ();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +253,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  thread_wakeup();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
