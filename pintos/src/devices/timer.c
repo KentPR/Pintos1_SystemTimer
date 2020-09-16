@@ -20,12 +20,13 @@
 struct thr_queue /* modification */
 {
   struct thread *thr;
+  int64_t sleep_ticks;
   struct thr_queue *next;
 };
 
 static struct thr_queue *head = NULL;
 static struct thr_queue *tail = NULL;
-//static struct thr_queue *cur = NULL;
+struct thr_queue *cur = NULL;
 static int nodes_count = 0;
 
 void create_node ();
@@ -99,55 +100,52 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-void create_node()
+void create_node_insert(int64_t s_ticks)
 {
+  cur=head;
+  struct thr_queue *tmp;
   if (head == NULL)
   {
     head = (struct thr_cueue *) malloc (sizeof (struct thr_queue));
     head -> next = NULL;
     tail = head;
     head -> thr = thread_current();
+    head -> sleep_ticks = s_ticks;
   }
   else
   {
-    tail -> next = (struct thr_cueue *) malloc (sizeof (struct thr_queue));
-    tail = tail -> next;
-    tail -> thr = thread_current();
-    tail -> next = NULL;
+    if(head->sleep_ticks<s_ticks)
+    {
+      head = (struct thr_cueue *) malloc (sizeof (struct thr_queue));
+      head->thr=thread_current();
+      head->sleep_ticks=s_ticks;
+      head->next=cur;
+    }
+    else
+    {
+      while(cur->next->sleep_ticks <= s_ticks) //ищем нужное место
+      {
+        cur=cur->next; //переход по списку
+      }
+        tmp=cur->next;
+        cur->next=(struct thr_cueue *) malloc (sizeof (struct thr_queue));
+        cur->next->thr=thread_current();
+        cur->next->sleep_ticks=s_ticks;
+        cur->next->next=tmp;
+    }
+    
+    // tail -> next = (struct thr_cueue *) malloc (sizeof (struct thr_queue));
+    // tail = tail -> next;
+    // tail -> thr = thread_current();
+    // tail ->sleep_ticks = s_ticks;
+    // tail -> next = NULL;
   }
   nodes_count++;
 }
 
-//  void sort_insert_list (struct thr_queue *head)
-//  {
-//      struct thr_queue *p, *key;
-//      struct thr_queue *result = root;
-//      root = root->next;      /* Головой стал следующий элемент */
-//      result->next = NULL;    /* Первый элемент отсортированного списка */
-
-//      while(root->next != NULL){
-//          key = root;
-//          root = root->next;
-//          if(key->thr->sleep_ticks < result->thr->sleep_ticks){   /* Вставляем результат в голову */
-//              key->next = result;
-//              result = key;
-//          }else{
-//              p = result;
-//              while(p->next != NULL){     /* Бежим по уже сформированному результату */
-//                  if(p->next->thr->sleep_ticks > key->thr->sleep_ticks)
-//                      break;
-//                  p = p->next;
-//              }
-//              key->next = p->next;
-//              p->next = key;
-//          }
-//      }
-//      root = result;
-//  }
-
 void thread_wakeup(void)
 {
-  while(head->thr->sleep_ticks <= timer_tikcs())
+  while(head->sleep_ticks <= timer_tikcs())
   {
     thread_unblock(head->thr);
     head=head->next;
@@ -164,13 +162,15 @@ timer_sleep (int64_t ticks)
   ASSERT (intr_get_level () == INTR_ON);
   if (ticks < 1) return; /* defence */
 
-  thread_current()->sleep_ticks = ticks;
+  int64_t s_ticks = ticks;
   enum intr_level old_level;
   old_level = intr_disable();
   
-  create_node ();
-  tail -> thr = thread_current();
-  sort_insert_list(head);
+  create_node (s_ticks);
+
+  // tail -> thr = thread_current();
+  // sort_insert_list(head);
+
   intr_set_level(old_level);	
   thread_yeld();
   //while (timer_elapsed (start) < ticks) 
